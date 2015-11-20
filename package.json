@@ -1,0 +1,19 @@
+{
+  "name": "ready-bot",
+  "version": "0.1.0",
+  "description": "",
+  "main": "release.js",
+  "dependencies": {
+    "moment": "^2.10.6",
+    "node-telegram-bot-api": "^0.15.0",
+    "redis": "^2.3.0",
+    "sprintf-js": "^1.0.3",
+    "total.js": "^1.9.2"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
