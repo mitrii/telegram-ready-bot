@@ -1,9 +1,14 @@
 require('total.js');
+
 var TelegramBot = require('node-telegram-bot-api'), 
 	  moment = require('moment'),
     sprintf = require("sprintf-js").sprintf,
     vsprintf = require("sprintf-js").vsprintf,
-    redis = require("redis");
+    redis = require("redis"),
+    fs = moment = require('fs');
+
+var utils = require('total.js/utils');
+var config = fs.readFileSync('bot-params').toString('utf8').parseConfig();
     
 var rc = redis.createClient();
 
@@ -15,7 +20,7 @@ rc.on("error", function (err) {
 // client.select(3, function() { /* ... */ }); 
 
  
-var token = '<TELEGRAM-API-KEY>';
+var token = config.telegram_key;
 
 // Setup polling way
 var bot = new TelegramBot(token, {polling: true, interval: 200});
@@ -26,11 +31,13 @@ var messages = {
     stop_lobby: 'Ожидание игроков сброшено',
     go: 'GO GO GO',
     counts: '%(curr_count)d из %(count)d готовы',
+    timeout: 'Время на исходе, осталось %(time)d секунд. Необходимо еще %(curr_need)d из %(count)d',
     late: 'Не успел, нужное количество уже набралось. Sad but true.',
     please_start_new: 'Похоже, что еще никто не запустил ожидание командой /new',
     minus: 'Отказ принят.',
     result: 'Кто играет: %s',
-    result_kicker: 'Кто играет: 🔵%(left)s �VS 🔴%(right)s'
+    result_kicker: '🔵%(left)s VS 🔴%(right)s',
+    whos_ready: 'Кто готов: %s'
 }
 
 function shuffle(o){
@@ -48,8 +55,12 @@ function user_to_str(usr)
     }
 }
 
-function show_result(chat_id)
+function show_result(msg)
 {
+    var chat_id = msg.chat.id,
+        from_id = msg.from.id,
+        msg_id  = msg.message_id;
+    
     rc.smembers("list_"+chat_id, function(err, res){
         var players = [];
         res.forEach(function(user, index){
@@ -67,14 +78,58 @@ function show_result(chat_id)
     });
 }
 
+function del(msg)
+{
+    rc.del(["list_"+msg.chat.id, "ops_"+msg.chat.id], function(){
+        bot.sendMessage(chat_id, messages.stop_lobby);
+    });
+}
+
+function who(msg)
+{
+    rc.smembers("list_"+msg.chat.id, function(err, res){
+        var players = [];
+        res.forEach(function(user, index){
+          user = JSON.parse(user);
+          players.push(user.name);     
+        });
+        
+         bot.sendMessage(msg.chat.id, sprintf(messages.whos_ready, players.join(', ')));
+        
+        
+    });
+}
+
+function timeout(msg, time)
+{
+    rc.smembers("list_"+msg.chat.id, function(err, res){
+        var players = [];
+        res.forEach(function(user, index){
+          user = JSON.parse(user);
+          players.push(user.name);     
+        });
+        
+        rc.get("ops_"+msg.chat.id, function(err, res){
+            var ops = JSON.parse(res);
+            if (players.length < ops.count)  {
+                bot.sendMessage(msg.chat.id, sprintf(messages.timeout, {time: time, curr_need: ops.count - players.length, count: ops.count}));
+                setTimeout(function(){del(msg)}, time * 1000);
+            }
+            else
+            {
+                del(msg);
+            }  
+        });       
+    });
+}
+
 function stop(msg)
 {
     var chat_id = msg.chat.id,
         from_id = msg.from.id,
         msg_id  = msg.message_id;
     
-    rc.del(["list_"+chat_id, "ops_"+chat_id], rc.print);
-    bot.sendMessage(chat_id, messages.stop_lobby);
+    del(msg);
 }
 
 function plus(msg)
@@ -96,7 +151,7 @@ function plus(msg)
                    
                     bot.sendMessage(chat_id, sprintf(messages.counts, {curr_count: curr_count, count: ops.count}));
                     if (curr_count >= ops.count)  {
-                         show_result(chat_id);
+                         setTimeout(function(){show_result(msg)}, 1000);
                     }
 
                 });  
@@ -135,6 +190,7 @@ function minus(msg)
 
 function start(msg, count, rnd, max_time, split)
 {
+    
     var chat_id = msg.chat.id,
         from_id = msg.from.id,
         msg_id  = msg.message_id;
@@ -144,29 +200,35 @@ function start(msg, count, rnd, max_time, split)
     max_time = typeof max_time !== 'undefined' ? max_time : 300;
     split = typeof split !== 'undefined' ? split : 300;
     
+    
     var ops = {
         count: count, 
         rnd: rnd, 
         max_time: max_time, 
         split: split,
-        start_time: moment().unix()
+        //start_time: 
     };
     var exists = false;
    
     
     rc.exists("list_"+chat_id, function(err, res){
       exists = res;
+     
       
       if (exists) {
         bot.sendMessage(chat_id, messages.already_exists);
       }
       else {
         rc.append("ops_"+chat_id, JSON.stringify(ops), function(err, res){
+            
+           
+            var timeout_val = (max_time-30) * 1000;
+            
+            setTimeout(function(){timeout(msg, 30)}, timeout_val);
+            
             plus(msg)
         });
         
-        rc.expire("list_"+chat_id, ops.max_time);
-        rc.expire("ops_"+chat_id, ops.max_time);
         
         var reply_keyboard = {
             keyboard:[['+', '-']],
@@ -184,8 +246,6 @@ bot.onText(/\/echo (.+)/, function (msg, match) {
   var fromId = msg.from.id;
   var resp = match[1];
   
-  console.log(user_to_str(msg.from));
-  
   bot.sendMessage(fromId, resp);
 });
 
@@ -196,6 +256,12 @@ bot.on('message', function (msg, match) {
   if (msg.text.startsWith('/new'))
   {
       start(msg);
+  }
+  
+  //rnd
+  if (msg.text.startsWith('/rnd') || msg.text.startsWith('/random'))
+  {
+      show_result(msg)
   }
   
   // kicker

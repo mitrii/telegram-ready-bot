@@ -1,0 +1,8 @@
+version                         : DEBUG
+
+default-ip                      : 127.0.0.1
+default-port                    : 8000
+
+secret                          : secret-key-for-web
+
+telegram_key                    : 127578682:AAEXu082Wta-zksQpVnIpqKp-fyGNtGfv2g
