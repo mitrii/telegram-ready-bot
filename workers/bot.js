@@ -81,7 +81,7 @@ function show_result(msg)
 function del(msg)
 {
     rc.del(["list_"+msg.chat.id, "ops_"+msg.chat.id], function(){
-        bot.sendMessage(chat_id, messages.stop_lobby);
+        bot.sendMessage(msg.chat.id, messages.stop_lobby);
     });
 }
 
