@@ -33,12 +33,12 @@ var messages = {
     already_exists: 'Голосование уже запущено, выполните команду /stop для отмены',
     stop_lobby: 'Голосование завершено',
     go: 'GO GO GO',
-    counts: '%(curr_count)d из %(count)d проголосовали ЗА',
+    counts: '%(curr_count)d из %(count)d готовы',
     timeout: 'Время на исходе, осталось %(time)d секунд. Необходимо еще %(curr_need)d из %(count)d',
     late: 'Не успел, голосование завершено. Sad but true.',
     please_start_new: 'Похоже, что еще никто не запустил голосование командой /new',
     minus: 'Отказ принят.',
-    result: 'Кто проголосовал: %s',
+    result: 'Кто готов: %s',
     result_kicker: '🔵%(left)s VS 🔴%(right)s',
     whos_ready: 'Кто готов: %s',
     stop_by_not_creator: 'Только создатель голосования может его отменить'
@@ -61,29 +61,32 @@ function user_to_str(usr)
 
 function get_ops(msg, callback)
 {   
-        rc.get("ops_"+msg.chat.id, callback); 
+    rc.get("ops_"+msg.chat.id, callback); 
+}
+
+function get_votes(msg, callback)
+{
+    rc.smembers("list_"+msg.chat.id, function(err, res){
+        var votes = [];
+        res.forEach(function(user, index){
+          user = JSON.parse(user);
+          votes.push(user.name);     
+        });
+        
+        callback(votes);
+    });
 }
 
 function show_result(msg)
-{
-    var chat_id = msg.chat.id,
-        from_id = msg.from.id,
-        msg_id  = msg.message_id;
-    
-    rc.smembers("list_"+chat_id, function(err, res){
-        var players = [];
-        res.forEach(function(user, index){
-          user = JSON.parse(user);
-          players.push(user.name);     
-        });
-        
+{   
+    get_votes(msg, function(players){        
         players = shuffle(players);
         
         var half_players = Math.ceil(players.length / 2);    
         var left_players = players.slice(0,half_players);
         var right_players = players.slice(half_players);
         
-        bot.sendMessage(chat_id, sprintf(messages.result_kicker, {left: left_players.join(', '), right: right_players.join(', ')}));
+        bot.sendMessage(msg.chat.id, sprintf(messages.result_kicker, {left: left_players.join(', '), right: right_players.join(', ')}));
     });
 }
 
@@ -96,28 +99,14 @@ function del(msg)
 
 function who(msg)
 {
-    rc.smembers("list_"+msg.chat.id, function(err, res){
-        var players = [];
-        res.forEach(function(user, index){
-          user = JSON.parse(user);
-          players.push(user.name);     
-        });
-        
-         bot.sendMessage(msg.chat.id, sprintf(messages.whos_ready, players.join(', ')));
-        
-        
+    get_votes(msg, function(players){
+        bot.sendMessage(msg.chat.id, sprintf(messages.whos_ready, players.join(', ')));       
     });
 }
 
 function timeout(msg, time)
 {
-    rc.smembers("list_"+msg.chat.id, function(err, res){
-        var players = [];
-        res.forEach(function(user, index){
-          user = JSON.parse(user);
-          players.push(user.name);     
-        });
-        
+    get_votes(msg, function(players){        
         get_ops(msg, function(err, res){
             var ops = JSON.parse(res);
             if (players.length < ops.count)  {
@@ -133,11 +122,7 @@ function timeout(msg, time)
 }
 
 function stop(msg)
-{
-    var chat_id = msg.chat.id,
-        from_id = msg.from.id,
-        msg_id  = msg.message_id;
-    
+{   
     get_ops(msg, function(err, res){
         var ops = JSON.parse(res);
       
