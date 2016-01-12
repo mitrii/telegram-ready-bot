@@ -24,20 +24,24 @@ var token = config.telegram_key;
 
 // Setup polling way
 var bot = new TelegramBot(token, {polling: true, interval: 200});
+bot.getMe().then(function (me) {
+  console.log('Start bot %s', me.username);
+});
 
 var messages = {
-    start_new: 'Го, я создал!',
-    already_exists: 'Ожидание уже запущено, выполните команду /stop для отсановки',
-    stop_lobby: 'Ожидание игроков сброшено',
+    start_new: 'Голосование открыто',
+    already_exists: 'Голосование уже запущено, выполните команду /stop для отмены',
+    stop_lobby: 'Голосование завершено',
     go: 'GO GO GO',
-    counts: '%(curr_count)d из %(count)d готовы',
+    counts: '%(curr_count)d из %(count)d проголосовали ЗА',
     timeout: 'Время на исходе, осталось %(time)d секунд. Необходимо еще %(curr_need)d из %(count)d',
-    late: 'Не успел, нужное количество уже набралось. Sad but true.',
-    please_start_new: 'Похоже, что еще никто не запустил ожидание командой /new',
+    late: 'Не успел, голосование завершено. Sad but true.',
+    please_start_new: 'Похоже, что еще никто не запустил голосование командой /new',
     minus: 'Отказ принят.',
-    result: 'Кто играет: %s',
+    result: 'Кто проголосовал: %s',
     result_kicker: '🔵%(left)s VS 🔴%(right)s',
-    whos_ready: 'Кто готов: %s'
+    whos_ready: 'Кто готов: %s',
+    stop_by_not_creator: 'Только создатель голосования может его отменить'
 }
 
 function shuffle(o){
@@ -53,6 +57,11 @@ function user_to_str(usr)
     else {
         return JSON.stringify({id: usr.id, name: usr.first_name});
     }
+}
+
+function get_ops(msg, callback)
+{   
+        rc.get("ops_"+msg.chat.id, callback); 
 }
 
 function show_result(msg)
@@ -109,7 +118,7 @@ function timeout(msg, time)
           players.push(user.name);     
         });
         
-        rc.get("ops_"+msg.chat.id, function(err, res){
+        get_ops(msg, function(err, res){
             var ops = JSON.parse(res);
             if (players.length < ops.count)  {
                 bot.sendMessage(msg.chat.id, sprintf(messages.timeout, {time: time, curr_need: ops.count - players.length, count: ops.count}));
@@ -129,7 +138,16 @@ function stop(msg)
         from_id = msg.from.id,
         msg_id  = msg.message_id;
     
-    del(msg);
+    get_ops(msg, function(err, res){
+        var ops = JSON.parse(res);
+      
+        if (ops.creator == msg.from.id) 
+            del(msg);
+        else 
+            bot.sendMessage(msg.chat.id, messages.stop_by_not_creator);    
+    });
+    
+    
 }
 
 function plus(msg)
@@ -138,7 +156,7 @@ function plus(msg)
         from_id = msg.from.id,
         msg_id  = msg.message_id;
     
-    rc.get("ops_"+chat_id, function(err, res){
+    get_ops(msg, function(err, res){
           
       if (res) {
         rc.scard("list_"+chat_id, function(err, curr_count){
@@ -206,6 +224,7 @@ function start(msg, count, rnd, max_time, split)
         rnd: rnd, 
         max_time: max_time, 
         split: split,
+        creator: from_id
         //start_time: 
     };
     var exists = false;
