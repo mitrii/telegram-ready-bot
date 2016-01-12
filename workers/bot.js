@@ -191,7 +191,7 @@ function minus(msg)
     });
 }
 
-function start(msg, count, rnd, max_time, split)
+function start(msg, count, rnd, max_time, split, title)
 {
     
     var chat_id = msg.chat.id,
@@ -202,14 +202,15 @@ function start(msg, count, rnd, max_time, split)
     rnd = typeof rnd !== 'undefined' ? rnd : false;
     max_time = typeof max_time !== 'undefined' ? max_time : 300;
     split = typeof split !== 'undefined' ? split : 300;
-    
+    title = typeof title !== 'undefined' ? title : messages.start_new;
     
     var ops = {
         count: count, 
         rnd: rnd, 
         max_time: max_time, 
         split: split,
-        creator: from_id
+        creator: from_id,
+        title: title,
         //start_time: 
     };
     var exists = false;
@@ -239,7 +240,7 @@ function start(msg, count, rnd, max_time, split)
             one_time_keyboard: true
         }
         
-        bot.sendMessage(chat_id, messages.start_new, {reply_markup: JSON.stringify(reply_keyboard)});
+        bot.sendMessage(chat_id, title, {reply_markup: JSON.stringify(reply_keyboard)});
       }     
 
     });
@@ -271,7 +272,7 @@ bot.on('message', function (msg, match) {
   // kicker
   if (msg.text.startsWith('/kicker'))
   {
-      start(msg, 4, true, 300, true);
+      start(msg, 4, true, 300, true, 'Кто в кикер?');
   }
   
   // csgo
